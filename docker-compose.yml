@@ -1,0 +1,22 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./vector_store:/app/vector_store
+      - ./logs:/app/logs
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+
+  ui:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./vector_store:/app/vector_store
+      - ./logs:/app/logs
+    command: streamlit run src/ui/app.py --server.address 0.0.0.0 --server.port 8501

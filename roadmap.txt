@@ -1,0 +1,189 @@
+## Full Pipeline for a Production-Grade RAG Chatbot
+
+You already have the core pieces for a legal RAG system. The production pipeline should look like this:
+
+1. **Data Ingestion**
+   - Raw inputs: json metadata + pdfs documents
+   - Output: cleaned JSON/HTML data and extracted PDF text
+
+2. **Preprocessing**
+   - Clean HTML/text
+   - Extract metadata fields
+   - Normalize and unify document IDs
+   - Output: parquet or structured files for downstream use
+
+3. **Chunking**
+   - Split long documents into searchable chunks
+   - Keep metadata per chunk (`doc_id`, `chunk_id`, court, judge, year)
+   - Output: chunk parquet / chunk dataset
+
+4. **Embedding & Vector Store**
+   - Convert chunks into vectors
+   - Store vectors in FAISS (or another vector DB)
+   - Save metadata mapping for each vector
+
+5. **Retrieval + RAG**
+   - Accept user query
+   - Retrieve top relevant chunks from vector store
+   - Build prompt/context from retrieved chunks
+   - Call LLM to answer/chat/summarize/generate
+
+6. **UI / Chatbot**
+   - Web or API interface to receive user questions
+   - Show responses, sources, citations, and follow-up capability
+
+7. **Production Hardening**
+   - Deployment
+   - Monitoring and logging
+   - Error handling
+   - Model configuration / rate limiting
+   - Data refresh and reindexing
+
+---
+
+## What the Project Has Now
+
+### Existing components
+- process.py
+  - Metadata extraction from JSON
+  - Cleans HTML and writes partitioned parquet to processed_data
+- pdf_parser.py
+  - Extracts PDF text and writes parquet to pdf_text_data
+- chunking.py
+  - Splits text into chunks and writes partitioned chunk parquet
+- vector_store.py
+  - Builds FAISS vector store from chunk parquet data
+- retriever.py
+  - Likely handles retrieval from the vector store
+- query_pipeline.py
+  - Likely orchestrates query → retrieval → LLM
+- doc_generator.py
+  - Document generation logic
+- summarize.py
+  - Summarization logic
+- app.py
+  - User interface entrypoint
+
+---
+
+## What Service to Build Next
+
+### Best next service: **RAG Query Service / Chat API**
+This is the heart of the chatbot. It should:
+- accept user questions
+- retrieve relevant chunks from the vector store
+- generate responses using the LLM
+- return answer + source snippets + metadata
+
+Why next?
+- Makes the system interactive
+- Connects preprocessing and embeddings to a real chatbot
+- Exposes a reusable API for UI, CLI, or integration
+
+---
+
+## Phase-by-Phase Plan
+
+### Phase 1: Data Pipeline
+Build or refine these services:
+- `PDF Extraction Service`
+  - Convert `data/pdfs/*.pdf` → pdf_text_data
+- `Metadata Processing Service`
+  - Convert `data/json/*.json` → processed_data
+- `Chunking Service`
+  - Convert extracted text + metadata → chunks_data
+
+### Phase 2: Embeddings & Indexing
+Build:
+- `Embedding Service`
+  - Use a stable model like `all-MiniLM-L6-v2`
+- `Vector Store Service`
+  - Create / update FAISS index
+- `Index Refresh Service`
+  - Rebuild index when new docs arrive
+
+### Phase 3: Retrieval + RAG Orchestration
+Build:
+- `Retrieval Service`
+  - Query vector store and return top chunks
+- `Prompt Assembly Service`
+  - Format retrieved chunks plus system prompt for the LLM
+- `LLM Inference Service`
+  - Call OpenAI / HuggingFace / local model
+- `Answer Service`
+  - Post-process output, add citations and safety filters
+
+### Phase 4: Chat UI / API
+Build:
+- `Chat API`
+  - REST or FastAPI endpoint
+- `Frontend UI`
+  - Streamlit / Gradio or simple web page
+- `Conversation Manager`
+  - Maintain chat state, follow-ups, memory
+
+### Phase 5: Production Grade
+Build:
+- `Deployment Service`
+  - Docker / cloud deployment
+- `Monitoring Service`
+  - Logs, errors, latency, usage
+- `Security Service`
+  - Auth, API keys
+- `Data Refresh Service`
+  - Scheduled re-indexing and incremental ingestion
+- `Evaluation Service`
+  - Accuracy checks, hallucination detection, scoring
+
+---
+
+## Recommended Architecture for a Production RAG Chatbot
+
+```
+User UI / API
+      ↓
+Chat API Service
+      ↓
+RAG Service
+  ├─ Retrieval
+  ├─ Prompt builder
+  └─ LLM inference
+      ↓
+Vector Store (FAISS)
+      ↑
+Embedding Service
+      ↑
+Chunking Service
+      ↑
+Preprocessing Service
+      ↑
+Raw Data (PDF + JSON)
+```
+
+---
+
+## Practical Next Step for You
+
+### Build this next:
+- query_pipeline.py as a proper API service
+- app.py or pipeline.py to call it
+- retriever.py so it can query the FAISS store reliably
+
+### Why
+That turns the project from a data-processing demo into an actual chatbot service.
+
+---
+
+## Why This Makes It Production Grade
+
+A proper production RAG chatbot needs:
+- stable ingestion
+- chunked searchable data
+- vector search
+- LLM orchestration
+- user-facing service
+- monitoring and update pipeline
+
+You already have the first three. The missing core piece is the **query/chat service**.
+
+If you want, I can next give you a phase-by-phase implementation checklist with concrete file changes for this repo.

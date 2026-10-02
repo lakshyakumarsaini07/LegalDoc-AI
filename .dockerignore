@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+data/
+pdf_text_data/
+processed_data/
+chunks_data/
+logs/
+notebooks/
+.pytest_cache/
+.git/
