@@ -30,8 +30,14 @@ LOG_DIR = BASE_DIR / "logs"
 # ------------------------------------------------------------------
 # Embedding / retrieval
 # ------------------------------------------------------------------
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))  # must match EMBEDDING_MODEL's output size
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")  # FAISS backend only (local, 384-dim)
+
+# Supabase backend uses Gemini's hosted embedding API instead of local
+# sentence-transformers/torch, so the backend has a small enough dependency
+# footprint to run as a Vercel serverless function.
+GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001")
+GEMINI_EMBEDDING_DIM = int(os.getenv("GEMINI_EMBEDDING_DIM", "768"))
+
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "800"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
 

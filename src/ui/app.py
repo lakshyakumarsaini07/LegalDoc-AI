@@ -6,8 +6,19 @@ Run with: streamlit run src/ui/app.py
 from __future__ import annotations
 
 import io
+import os
 
 import streamlit as st
+
+# On Streamlit Community Cloud, config is set via the "Secrets" UI (TOML) and
+# exposed through st.secrets; mirror it into os.environ before src.config
+# reads env vars, so the same code works there, locally, and via Docker.
+try:
+    for _key, _value in st.secrets.items():
+        os.environ.setdefault(_key, str(_value))
+except Exception:
+    pass
+
 from docx import Document as DocxDocument
 
 from src.config import VECTOR_STORE_BACKEND, has_llm_configured, vector_store_ready

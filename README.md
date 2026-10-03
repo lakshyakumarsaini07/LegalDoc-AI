@@ -68,11 +68,30 @@ the vector store.
   service, works offline.
 - `supabase`: embeddings + chunk metadata live in a Supabase Postgres table
   (pgvector), so retrieval works across multiple app instances/deployments
-  instead of a single local file. Apply `supabase/schema.sql` to your
-  Supabase project first (SQL Editor, or `supabase db push`), then set
-  `SUPABASE_URL` and `SUPABASE_KEY` (service role key) in `.env` before
-  running `pipeline.py`. BM25 (for hybrid search) still runs in-process,
-  fetching the corpus from the `legal_chunks` table at retriever load time.
+  instead of a single local file, and is the only backend light enough to
+  run as a Vercel serverless function (see **Deployment** below). Apply
+  `supabase/schema.sql` to your Supabase project first (SQL Editor, or
+  `supabase db push`), then set `SUPABASE_URL` and `SUPABASE_KEY` (service
+  role key) in `.env` before running `pipeline.py`. BM25 (for hybrid search)
+  still runs in-process, fetching the corpus from the `legal_chunks` table at
+  retriever load time. This backend embeds with **Gemini's hosted embedding
+  API** (`GEMINI_EMBEDDING_MODEL`, 768-dim by default) rather than local
+  sentence-transformers/torch — deliberately, to keep the backend's
+  dependency footprint small. The FAISS backend always uses local MiniLM
+  embeddings (384-dim); the two are not interchangeable without re-ingesting.
+
+  **Free-tier quota note**: Gemini's free embedding quota is 1000
+  requests/day (one chunk = one request — there's no true batch endpoint).
+  The full corpus (5000+ chunks) doesn't fit in a day's quota on the free
+  tier. For a demo/personal-project deployment, build a smaller subset first:
+  ```bash
+  python scripts/make_supabase_demo_subset.py 100   # ~400-500 chunks
+  python -c "from src.embeddings.supabase_store import SupabaseVectorStore; SupabaseVectorStore().build(chunk_source='chunks_data_demo_subset.parquet')"
+  ```
+  `SupabaseVectorStore.build()` is resumable (skips chunk_ids already
+  ingested) and rate-limit-aware (paces requests, backs off on 429s), so it's
+  safe to re-run if interrupted. To ingest the full corpus, either spread it
+  across ~6 days of free-tier quota or enable billing on the Gemini API key.
 
 ## Run it
 
@@ -96,6 +115,62 @@ Endpoints: `GET /health`, `POST /chat`, `POST /summarize`, `POST /generate`, `PO
 docker compose up --build
 ```
 
+## Deployment
+
+The backend (FastAPI) and frontend (Streamlit) deploy separately — **Streamlit
+cannot run on Vercel** (it needs a persistent server with a live WebSocket
+connection; Vercel only runs stateless serverless functions), so the backend
+goes to Vercel and the UI goes to a host that supports long-running processes.
+
+### Backend → Vercel
+
+Requires `VECTOR_STORE_BACKEND=supabase` (the FAISS backend needs
+sentence-transformers/torch, which are far too large for a serverless
+function — see `api/requirements.txt`, a trimmed dependency set used only for
+this deployment). `api/index.py` is the serverless entrypoint; `vercel.json`
+routes every path to it.
+
+```bash
+npm i -g vercel          # if you don't already have the CLI
+cd "d:/LegalDoc AI"
+vercel login
+vercel link              # creates/links a Vercel project for this repo
+
+vercel env add GOOGLE_API_KEY production
+vercel env add VECTOR_STORE_BACKEND production   # value: supabase
+vercel env add SUPABASE_URL production
+vercel env add SUPABASE_KEY production           # service_role key
+# optional: API_KEY (protect the endpoints), ALLOWED_ORIGINS (your Streamlit URL)
+
+vercel --prod
+```
+
+Cold starts rebuild the in-process BM25 index from the full `legal_chunks`
+table on every cold start (Supabase has no built-in BM25), which costs a few
+seconds of latency under low traffic — a known tradeoff of this architecture,
+not a bug.
+
+### Frontend → Streamlit Community Cloud (recommended)
+
+Free, official, zero code changes needed.
+
+1. Push this repo to GitHub.
+2. [share.streamlit.io](https://share.streamlit.io) → New app → point at your
+   repo, branch, and `src/ui/app.py`.
+3. App settings → Secrets → paste (TOML format):
+   ```toml
+   GOOGLE_API_KEY = "..."
+   VECTOR_STORE_BACKEND = "supabase"
+   SUPABASE_URL = "..."
+   SUPABASE_KEY = "..."
+   ```
+4. Deploy. (`src/ui/app.py` mirrors `st.secrets` into `os.environ` at
+   startup, so the same `src.config` env-var reads work unchanged.)
+
+Render, Railway, Fly.io, or Hugging Face Spaces work equally well if you'd
+rather not use Streamlit Community Cloud — any host that runs a persistent
+process works; the constraint is specifically about Vercel's serverless model.
+
 ## Tests
 
 ```bash
@@ -111,9 +186,11 @@ schema, and every pipeline's LLM-available / LLM-unavailable code paths.
 - `src/preprocessing/pdf_parser.py` — PDF → text (idempotent)
 - `process.py` — JSON metadata → cleaned, structured records (idempotent)
 - `src/embeddings/chunking.py` — text → context-aware chunks
-- `src/embeddings/vector_store.py` — chunks → FAISS index (local backend)
-- `src/embeddings/supabase_store.py` — chunks → Supabase pgvector (cloud backend)
+- `src/embeddings/vector_store.py` — chunks → FAISS index (local MiniLM embeddings)
+- `src/embeddings/supabase_store.py` — chunks → Supabase pgvector (Gemini embeddings)
+- `src/embeddings/gemini_embeddings.py` — Gemini embedding API wrapper (no torch dependency)
 - `supabase/schema.sql` — pgvector table + similarity-search RPC for the Supabase backend
+- `api/index.py`, `api/requirements.txt`, `vercel.json` — Vercel serverless deployment
 - `src/rag/retriever.py` — hybrid vector + BM25 retrieval (RRF), backend-agnostic
 - `src/rag/query_pipeline.py` — retrieval → Gemini → cited answer
 - `src/summarization/summarize.py` — map-reduce document summarization

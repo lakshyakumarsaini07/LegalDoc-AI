@@ -58,7 +58,7 @@ def run_full_pipeline(force: bool = False) -> None:
     if VECTOR_STORE_BACKEND == "supabase":
         from src.embeddings.supabase_store import SupabaseVectorStore
 
-        SupabaseVectorStore(model_name=EMBEDDING_MODEL).build(chunk_source=CHUNKS_DATA_DIR)
+        SupabaseVectorStore().build(chunk_source=CHUNKS_DATA_DIR)
     else:
         from src.embeddings.vector_store import ChunkedVectorStore
 

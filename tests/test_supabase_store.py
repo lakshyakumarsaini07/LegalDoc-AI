@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from src.embeddings import supabase_store as supabase_store_module
-from src.embeddings.supabase_store import SupabaseVectorStore
+from src.embeddings.supabase_store import SupabaseVectorStore, _retry_delay_seconds
 
 
 class FakeExecuteResult:
@@ -72,7 +72,7 @@ class FakeEmbeddings:
 
 def _make_store(monkeypatch, client):
     monkeypatch.setattr(supabase_store_module, "_get_client", lambda: client)
-    monkeypatch.setattr(supabase_store_module, "get_embeddings", lambda model_name: FakeEmbeddings())
+    monkeypatch.setattr(supabase_store_module, "get_gemini_embeddings", lambda: FakeEmbeddings())
     return SupabaseVectorStore()
 
 
@@ -106,6 +106,38 @@ def test_build_upserts_rows_with_chunk_id_conflict_target(monkeypatch, tmp_path)
     assert isinstance(row["decision_year"], int)
     assert row["content"] == "Case Title: Sample Case\nContent: indemnity text"
     assert row["embedding"] == [0.1, 0.2, 0.3]
+
+
+def test_build_skips_chunks_already_present_in_supabase(monkeypatch, tmp_path):
+    chunk_path = tmp_path / "chunks.parquet"
+    pd.DataFrame(
+        [
+            {"chunk_id": "doc1_0", "doc_id": "doc1", "chunk_text": "already ingested"},
+            {"chunk_id": "doc1_1", "doc_id": "doc1", "chunk_text": "still needs embedding"},
+        ]
+    ).to_parquet(chunk_path)
+
+    client = FakeClient(table_rows=[{"chunk_id": "doc1_0"}])
+    store = _make_store(monkeypatch, client)
+
+    store.build(chunk_source=chunk_path)
+
+    assert len(client._table.upserted) == 1
+    assert client._table.upserted[0]["chunk_id"] == "doc1_1"
+
+
+def test_build_force_reprocesses_everything(monkeypatch, tmp_path):
+    chunk_path = tmp_path / "chunks.parquet"
+    pd.DataFrame(
+        [{"chunk_id": "doc1_0", "doc_id": "doc1", "chunk_text": "already ingested"}]
+    ).to_parquet(chunk_path)
+
+    client = FakeClient(table_rows=[{"chunk_id": "doc1_0"}])
+    store = _make_store(monkeypatch, client)
+
+    store.build(chunk_source=chunk_path, force=True)
+
+    assert len(client._table.upserted) == 1
 
 
 def test_build_handles_missing_optional_metadata(monkeypatch, tmp_path):
@@ -181,3 +213,50 @@ def test_get_client_raises_when_not_configured(monkeypatch):
     monkeypatch.setattr(supabase_store_module, "has_supabase_configured", lambda: False)
     with pytest.raises(RuntimeError, match="SUPABASE_URL"):
         supabase_store_module._get_client()
+
+
+def test_retry_delay_parses_suggested_wait():
+    exc = Exception("RESOURCE_EXHAUSTED ... Please retry in 27.19s")
+    assert _retry_delay_seconds(exc) == pytest.approx(30.19)
+
+
+def test_retry_delay_falls_back_to_default_when_unparseable():
+    assert _retry_delay_seconds(Exception("some other error"), default=65.0) == 65.0
+
+
+def test_embed_with_retry_recovers_from_rate_limit(monkeypatch):
+    client = FakeClient()
+    store = _make_store(monkeypatch, client)
+
+    monkeypatch.setattr(supabase_store_module.time, "sleep", lambda _seconds: None)
+
+    calls = {"count": 0}
+
+    class FlakyEmbeddings(FakeEmbeddings):
+        def embed_documents(self, texts):
+            calls["count"] += 1
+            if calls["count"] < 3:
+                raise Exception("429 RESOURCE_EXHAUSTED ... Please retry in 1s")
+            return super().embed_documents(texts)
+
+    store.embeddings = FlakyEmbeddings()
+
+    result = store._embed_with_retry(["a", "b"])
+
+    assert calls["count"] == 3
+    assert result == [[0.1, 0.2, 0.3], [0.1, 0.2, 0.3]]
+
+
+def test_embed_with_retry_raises_after_exhausting_attempts(monkeypatch):
+    client = FakeClient()
+    store = _make_store(monkeypatch, client)
+    monkeypatch.setattr(supabase_store_module.time, "sleep", lambda _seconds: None)
+
+    class AlwaysFailsEmbeddings(FakeEmbeddings):
+        def embed_documents(self, texts):
+            raise Exception("429 RESOURCE_EXHAUSTED ... Please retry in 1s")
+
+    store.embeddings = AlwaysFailsEmbeddings()
+
+    with pytest.raises(Exception, match="RESOURCE_EXHAUSTED"):
+        store._embed_with_retry(["a"], max_retries=2)
