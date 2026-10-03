@@ -134,8 +134,13 @@ goes to Vercel and the UI goes to a host that supports long-running processes.
 Requires `VECTOR_STORE_BACKEND=supabase` (the FAISS backend needs
 sentence-transformers/torch, which are far too large for a serverless
 function — the root `requirements.txt` deliberately excludes them; local
-full-stack dev uses `requirements-local.txt` instead). `api/index.py` is the
-serverless entrypoint; `vercel.json` routes every path to it.
+full-stack dev uses `requirements-local.txt` instead).
+
+`app/main.py` is the serverless entrypoint — Vercel's FastAPI zero-config
+detection only recognizes an `app.py`/`index.py`/`main.py`/etc. entrypoint at
+the project root or inside `src/`/`app/` (not `api/`, which silently isn't
+picked up), and routes every path to it automatically — no `rewrites` needed
+in `vercel.json`.
 
 ```bash
 npm i -g vercel          # if you don't already have the CLI
@@ -197,7 +202,7 @@ schema, and every pipeline's LLM-available / LLM-unavailable code paths.
 - `src/embeddings/supabase_store.py` — chunks → Supabase pgvector (Gemini embeddings)
 - `src/embeddings/gemini_embeddings.py` — Gemini embedding API wrapper (no torch dependency)
 - `supabase/schema.sql` — pgvector table + similarity-search RPC for the Supabase backend
-- `api/index.py`, `requirements.txt` (root, trimmed), `vercel.json` — Vercel serverless deployment
+- `app/main.py`, `requirements.txt` (root, trimmed), `vercel.json` — Vercel serverless deployment
 - `src/rag/retriever.py` — hybrid vector + BM25 retrieval (RRF), backend-agnostic
 - `src/rag/query_pipeline.py` — retrieval → Gemini → cited answer
 - `src/summarization/summarize.py` — map-reduce document summarization
