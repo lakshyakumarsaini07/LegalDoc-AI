@@ -11,3 +11,5 @@ processed_data/
 chunks_data/
 chunks_data_demo_subset.parquet
 .pytest_cache/
+.vercel
+.env*

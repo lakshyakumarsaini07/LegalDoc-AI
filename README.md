@@ -39,9 +39,15 @@ of the same pipeline modules.
 ```bash
 python -m venv venv
 venv\Scripts\activate        # Windows
-pip install -r requirements.txt
+pip install -r requirements-local.txt
 copy .env.example .env       # then set GOOGLE_API_KEY (aistudio.google.com/apikey)
 ```
+
+(Named `requirements-local.txt` rather than `requirements.txt` deliberately —
+Vercel's Python builder picks up any `requirements.txt` it finds, and this
+one includes torch/sentence-transformers/faiss-cpu, which alone exceed
+Vercel's 500MB function size limit by more than 10x. `api/requirements.txt`
+is the only file named `requirements.txt`-equivalent Vercel will ever see.)
 
 Without `GOOGLE_API_KEY` set, every LLM-backed feature (chat answers,
 summarization, document generation, evaluation) degrades gracefully to a
