@@ -44,10 +44,11 @@ copy .env.example .env       # then set GOOGLE_API_KEY (aistudio.google.com/apik
 ```
 
 (Named `requirements-local.txt` rather than `requirements.txt` deliberately —
-Vercel's Python builder picks up any `requirements.txt` it finds, and this
-one includes torch/sentence-transformers/faiss-cpu, which alone exceed
-Vercel's 500MB function size limit by more than 10x. `api/requirements.txt`
-is the only file named `requirements.txt`-equivalent Vercel will ever see.)
+Vercel's Python builder only reads a `requirements.txt` at the project root,
+and the root `requirements.txt` in this repo is a trimmed set for the Vercel
+deployment. This file has the full local-dev set, including
+torch/sentence-transformers/faiss-cpu, which alone exceed Vercel's 500MB
+function size limit by more than 10x.)
 
 Without `GOOGLE_API_KEY` set, every LLM-backed feature (chat answers,
 summarization, document generation, evaluation) degrades gracefully to a
@@ -132,9 +133,9 @@ goes to Vercel and the UI goes to a host that supports long-running processes.
 
 Requires `VECTOR_STORE_BACKEND=supabase` (the FAISS backend needs
 sentence-transformers/torch, which are far too large for a serverless
-function — see `api/requirements.txt`, a trimmed dependency set used only for
-this deployment). `api/index.py` is the serverless entrypoint; `vercel.json`
-routes every path to it.
+function — the root `requirements.txt` deliberately excludes them; local
+full-stack dev uses `requirements-local.txt` instead). `api/index.py` is the
+serverless entrypoint; `vercel.json` routes every path to it.
 
 ```bash
 npm i -g vercel          # if you don't already have the CLI
@@ -196,7 +197,7 @@ schema, and every pipeline's LLM-available / LLM-unavailable code paths.
 - `src/embeddings/supabase_store.py` — chunks → Supabase pgvector (Gemini embeddings)
 - `src/embeddings/gemini_embeddings.py` — Gemini embedding API wrapper (no torch dependency)
 - `supabase/schema.sql` — pgvector table + similarity-search RPC for the Supabase backend
-- `api/index.py`, `api/requirements.txt`, `vercel.json` — Vercel serverless deployment
+- `api/index.py`, `requirements.txt` (root, trimmed), `vercel.json` — Vercel serverless deployment
 - `src/rag/retriever.py` — hybrid vector + BM25 retrieval (RRF), backend-agnostic
 - `src/rag/query_pipeline.py` — retrieval → Gemini → cited answer
 - `src/summarization/summarize.py` — map-reduce document summarization
