@@ -144,6 +144,15 @@ class StatsResponse(BaseModel):
 # ------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------
+@app.get("/")
+def root():
+    return {
+        "name": "LegalDoc AI API",
+        "docs": "/docs",
+        "endpoints": ["/health", "/stats", "/chat", "/summarize", "/generate", "/refine"],
+    }
+
+
 @app.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(

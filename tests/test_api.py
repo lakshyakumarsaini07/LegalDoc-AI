@@ -3,6 +3,16 @@ from fastapi.testclient import TestClient
 from src.api import main as api_main
 
 
+def test_root_endpoint_lists_available_routes():
+    client = TestClient(api_main.app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "/health" in body["endpoints"]
+    assert "/chat" in body["endpoints"]
+
+
 def test_health_reports_llm_and_vector_store_status(monkeypatch):
     monkeypatch.setattr(api_main, "vector_store_ready", lambda: False)
     monkeypatch.setattr(api_main, "has_llm_configured", lambda: False)
