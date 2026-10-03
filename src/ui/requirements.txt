@@ -1,0 +1,21 @@
+# Streamlit Community Cloud reads requirements.txt from this directory
+# (the entrypoint's own folder) before falling back to the repo root — see
+# https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies
+#
+# This mirrors the root requirements.txt (trimmed, Vercel-facing) plus the
+# UI-only extras (file upload / DOCX export). Assumes VECTOR_STORE_BACKEND=
+# supabase + Gemini embeddings, same as the Vercel backend — so no torch/
+# sentence-transformers/faiss-cpu/pandas/pyarrow needed here either.
+
+streamlit>=1.30.0
+python-docx>=1.1.0
+pypdf>=4.0.0
+python-dotenv>=1.0.0
+loguru>=0.7.2
+
+langchain-core>=0.3.0
+langchain-text-splitters>=0.3.0
+langchain-google-genai>=2.0.0
+
+supabase>=2.0.0
+rank-bm25>=0.2.2
