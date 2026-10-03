@@ -7,6 +7,14 @@ from __future__ import annotations
 
 import io
 import os
+import sys
+from pathlib import Path
+
+# Streamlit Community Cloud (and some other hosts) only add this script's own
+# directory to sys.path, not the repo root — so `import src...` fails there
+# even though it works locally (where cwd is normally the repo root). Add the
+# repo root explicitly before any `src.*` import.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import streamlit as st
 
